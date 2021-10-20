@@ -5,16 +5,20 @@ import numpy as np
 import json
 import torch
 import gym
+import datetime
+from torch.utils.tensorboard import SummaryWriter
 
 from population import Agent_Population
 from utils import soft_update, evaluate_populations
 
 def train(config: Dict):
+    logger = SummaryWriter('results/{}_{}_{}'.format(config['env'], config['seed'], datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')))
+
     print("loading hyparameters:\n",config)
     
     envs = [gym.make(config['env']) for _ in range(config['population_size'])]
-    for env in envs:
-        env.seed(config['seed'])
+    for i, env in enumerate(envs):
+        env.seed(config['seed'] + i)
     config.update(
         {
             'o_dim': envs[0].observation_space.shape[0], 
@@ -51,6 +55,8 @@ def train(config: Dict):
         if total_step % config['evaluate_step_interval'] == 0:
             mean_score, max_score = evaluate_populations(swarm, envs, config['evaluate_episodes'])
             print("Step: {}  Mean score: {:.5f}  Max score: {:.5f}".format(total_step, mean_score, max_score))
+            logger.add_scalar("Indicator/mean_score", mean_score, total_step)
+            logger.add_scalar("Indicator/max_score", mean_score, total_step)
 
 
 if __name__ == '__main__':

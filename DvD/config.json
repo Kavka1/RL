@@ -1,7 +1,7 @@
 {
     "seed": 1,
     "device": "cuda",
-    "env": "Ant-v2",
+    "env": "Humanoid-v3",
     "total_round": 100000,
     "train_start_step": 1000,
     "evaluate_step_interval": 2000,
