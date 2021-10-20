@@ -34,8 +34,8 @@ class Q_Function(nn.Module):
         self.model = nn.Sequential(*module_seq)
     
     def forward(self, obs: torch.tensor, action: torch.tensor) -> torch.tensor:
-        values = self.model(torch.cat([obs, action], dim=-1))
-        return values
+        value = self.model(torch.cat([obs, action], dim=-1))
+        return value
 
 class Twin_Q(nn.Module):
     def __init__(self, o_dim: Union[int, np.int32], a_dim: Union[int, np.int32], config: Dict) -> None:
@@ -43,6 +43,12 @@ class Twin_Q(nn.Module):
         self.Q_1 = Q_Function(o_dim=o_dim, a_dim=a_dim, config=config)
         self.Q_2 = Q_Function(o_dim=o_dim, a_dim=a_dim, config=config)
     
+    def Q1_value(self, obs: torch.tensor, action: torch.tensor) -> torch.tensor:
+        return self.Q_1(obs, action)
+    
+    def Q2_value(self, obs: torch.tensor, action: torch.tensor) -> torch.tensor:
+        return self.Q_2(obs, action)
+
     def forward(self, obs: torch.tensor, action: torch.tensor) -> Tuple(torch.tensor, torch.tensor):
         return self.Q_1(obs, action), self.Q_2(obs, action)
 
