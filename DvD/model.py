@@ -6,9 +6,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Policy(nn.Module):
-    def __init__(self, o_dim: Union[int, np.int32], a_dim: Union[int, np.int32], config: Dict) -> None:
+    def __init__(self,config: Dict) -> None:
         super(Policy, self).__init__()
         
+        o_dim, a_dim = config['o_dim'], config['a_dim']
         hidden_sizes = config['hidden_sizes']
         module_seq = []
         last_dim = o_dim
@@ -22,8 +23,10 @@ class Policy(nn.Module):
         return self.model(observation)
 
 class Q_Function(nn.Module):
-    def __init__(self, o_dim: Union[int, np.int32], a_dim: Union[int, np.int32], config: Dict) -> None:
+    def __init__(self, config: Dict) -> None:
         super(Q_Function, self).__init__()
+
+        o_dim, a_dim = config['o_dim'], config['a_dim']
         hidden_sizes = config['hidden_sizes']
         module_seq = []
         last_dim = o_dim + a_dim
@@ -38,10 +41,10 @@ class Q_Function(nn.Module):
         return value
 
 class Twin_Q(nn.Module):
-    def __init__(self, o_dim: Union[int, np.int32], a_dim: Union[int, np.int32], config: Dict) -> None:
-        super(Twin_Q).__init__()
-        self.Q_1 = Q_Function(o_dim=o_dim, a_dim=a_dim, config=config)
-        self.Q_2 = Q_Function(o_dim=o_dim, a_dim=a_dim, config=config)
+    def __init__(self,config: Dict) -> None:
+        super(Twin_Q, self).__init__()
+        self.Q_1 = Q_Function(config)
+        self.Q_2 = Q_Function(config)
     
     def Q1_value(self, obs: torch.tensor, action: torch.tensor) -> torch.tensor:
         return self.Q_1(obs, action)
@@ -49,10 +52,10 @@ class Twin_Q(nn.Module):
     def Q2_value(self, obs: torch.tensor, action: torch.tensor) -> torch.tensor:
         return self.Q_2(obs, action)
 
-    def forward(self, obs: torch.tensor, action: torch.tensor) -> Tuple(torch.tensor, torch.tensor):
+    def forward(self, obs: torch.tensor, action: torch.tensor) -> Tuple[torch.tensor, torch.tensor]:
         return self.Q_1(obs, action), self.Q_2(obs, action)
 
 
 if __name__ == "__main__":
-    config = {'hidden_sizes': [256, 256, 256]}
-    actor = Policy(o_dim=10, a_dim=2, config=config)
+    config = {'hidden_sizes': [256, 256, 256], 'o_dim': 10, 'a_dim': 2}
+    actor = Policy(config=config)

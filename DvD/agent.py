@@ -1,4 +1,3 @@
-import argparse
 from typing import Dict, List, Union, Tuple
 import torch
 import torch.nn as nn
@@ -11,25 +10,25 @@ from utils import soft_update
 from memory import Memory
 
 class TD3_agent(object):
-    def __init__(self, o_dim: Union[int, np.int32], a_dim: Union[int, np.int32], config: Dict) -> None:
+    def __init__(self, config: Dict) -> None:
         super(TD3_agent).__init__()
-        
+
         self.lr = config['lr']
         self.gamma = config['gamma']
         self.tau = config['tau']
         self.noise_std = config['noise_std']
         self.noise_clip = config['noise_clip']
-        self.min_action = config['min_action']
-        self.max_action = config['max_action']
+        self.a_max = config['a_max']
+        self.a_min = config['a_min']
         self.batch_size = config['batch_size']
         self.update_delay = config['update_delay']
         self.device = torch.device(config['device'])
 
-        self.policy = Policy(o_dim, a_dim, config).to(self.device)
-        self.policy_target = Policy(o_dim, a_dim, config).to(self.device)
+        self.policy = Policy(config).to(self.device)
+        self.policy_target = Policy(config).to(self.device)
 
-        self.twin_q = Twin_Q(o_dim, a_dim, config).to(self.device)
-        self.twin_q_target = Twin_Q(o_dim, a_dim, config).to(self.device)
+        self.twin_q = Twin_Q(config).to(self.device)
+        self.twin_q_target = Twin_Q(config).to(self.device)
 
         self.optimizer_pi = optim.Adam(self.policy.parameters(), lr=self.lr)
         self.optimizer_q = optim.Adam(self.twin_q.parameters(), lr=self.lr)
@@ -46,6 +45,7 @@ class TD3_agent(object):
             if use_noise:
                 noise = torch.randn_like(action, dtype=torch.float64, device=self.device)*self.noise_std
                 action = action + noise
+            action = action.clamp(self.a_min, self.a_max)
         return action.cpu().numpy()
     
     def get_target_action(self, next_obs_batch: torch.tensor) -> torch.tensor:
@@ -67,7 +67,7 @@ class TD3_agent(object):
         return loss_critic.item()
 
     def update_actor(self, obs_batch: torch.tensor) -> float:
-        loss_actor = - self.twin_q.Q1_value(obs_batch, self.policy(obs_batch))
+        loss_actor = - self.twin_q.Q1_value(obs_batch, self.policy(obs_batch)).mean()
         self.optimizer_pi.zero_grad()
         loss_actor.backward()
         self.optimizer_pi.step()
@@ -81,11 +81,11 @@ class TD3_agent(object):
     def update(self, step: int) -> None:
         batch = self.memory.sample(batch_size=self.batch_size)
         o, a, r, o_, done = batch
-        o = torch.from_numpy(o).to(self.device).float()
-        a = torch.from_numpy(a).to(self.device).float()
-        r = torch.from_numpy(r).to(self.device).float()
-        o_ = torch.from_numpy(o_).to(self.device).float()
-        done = torch.from_numpy(done).to(self.device).int()
+        o = torch.from_numpy(np.array(o)).to(self.device).float()
+        a = torch.from_numpy(np.array(a)).to(self.device).float()
+        r = torch.from_numpy(np.array(r)).to(self.device).float()
+        o_ = torch.from_numpy(np.array(o_)).to(self.device).float()
+        done = torch.from_numpy(np.array(done)).to(self.device).int()
 
         loss_critic = self.update_critic(o, a, r, o_, done)
         loss_actor = 0.
@@ -95,3 +95,6 @@ class TD3_agent(object):
             self.update_target()
         
         return loss_actor, loss_critic
+
+    def save_transition(self, transition: List) -> None:
+        self.memory.save_trans(transition)
