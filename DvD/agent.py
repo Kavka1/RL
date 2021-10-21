@@ -43,10 +43,10 @@ class TD3_agent(object):
         with torch.no_grad():
             action = self.policy(obs)
             if use_noise:
-                noise = torch.randn_like(action, dtype=torch.float64, device=self.device)*self.noise_std
+                noise = torch.randn_like(action, dtype=torch.float, device=self.device)*self.noise_std
                 action = action + noise
-            action = action.clamp(self.a_min, self.a_max)
-        return action.cpu().numpy()
+        action = np.clip(action.cpu().numpy(), self.a_min, self.a_max)
+        return action
     
     def get_target_action(self, next_obs_batch: torch.tensor) -> torch.tensor:
         target_action = self.policy_target(next_obs_batch)
