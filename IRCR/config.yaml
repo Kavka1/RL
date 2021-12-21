@@ -25,7 +25,7 @@ device: 'cpu'
 results_path: '/home/xukang/GitRepo/RL/IRCR/results/'
 max_timestep: 800000
 start_training_step: 2000
-train_policy_delay: 1
+train_policy_delay: 2
 save_interval: 100
 soft_update_interval: 1
 

@@ -25,7 +25,7 @@ class Policy(nn.Module):
             model.append(nn.Linear(hidden_layers[i], hidden_layers[i+1]))
             model.append(nn.ReLU())
         self.hidden_layers = nn.Sequential(*model)
-        self.mean_head = nn.Sequential(nn.Linear(hidden_layers[-1], self.a_dim), nn.Tanh())
+        self.mean_head = nn.Sequential(nn.Linear(hidden_layers[-1], self.a_dim))
         self.logstd_head = nn.Sequential(nn.Linear(hidden_layers[-1], self.a_dim))
 
     def __call__(self, obs: np.array, evaluation: bool = False) -> np.array:
@@ -35,7 +35,7 @@ class Policy(nn.Module):
             with torch.no_grad():
                 preprocess = self.hidden_layers(obs)
                 mean = self.mean_head(preprocess)
-            action = mean
+            action = torch.tanh(mean)
         else:
             with torch.no_grad():
                 preprocess = self.hidden_layers(obs)
@@ -45,6 +45,7 @@ class Policy(nn.Module):
             std = torch.exp(logstd)
             dist = Normal(mean, std)
             action = dist.sample()
+            action = torch.tanh(action)
         
         action = np.clip(action.cpu().numpy(), self.action_min, self.action_max)
         return action
@@ -57,9 +58,10 @@ class Policy(nn.Module):
         std = torch.exp(logstd)
 
         dist = Normal(mean, std)
-        action = dist.rsample()
+        arctanh_action = dist.rsample()
+        action = torch.tanh(arctanh_action)
 
-        log_prob = dist.log_prob(action) - torch.log(1- torch.tanh(action).pow(2) + 1e-6)
+        log_prob = dist.log_prob(arctanh_action) - torch.log(1- torch.tanh(arctanh_action).pow(2) + 1e-6)
         log_prob = log_prob.sum(dim=-1, keepdim=True)
 
         return action, log_prob

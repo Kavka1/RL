@@ -37,7 +37,7 @@ class Master(object):
         self.episode_reward_max, self.episode_reward_min = 10, 0
 
         self.train_count = 0
-        self.best_score = 0
+        self.best_score = -1000
         
         self.init_buffer()
         self.init_value_functions()
@@ -137,6 +137,7 @@ class Master(object):
             self.optimizer_alpha.zero_grad()
             loss_alpha.backward()
             self.optimizer_alpha.step()
+            nn.utils.clip_grad.clip_grad_norm_([self.log_alpha], max_norm=1.)
             self.alpha = torch.exp(self.log_alpha)
 
             self.log_policy_loss = loss_policy.item()
