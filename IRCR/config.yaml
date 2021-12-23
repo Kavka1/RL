@@ -1,5 +1,5 @@
 env_config:
-  env_name: 'HalfCheetah-v2'
+  env_name: 'Hopper-v2'
   max_episode_step: 1000
   env_seed: 10
   delay_reward: True
