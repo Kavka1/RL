@@ -20,6 +20,7 @@ class CURL_SACAgent(object):
         self.gamma = config['gamma']
         self.lr = config['lr']
         self.lr_log_alpha = config['lr_log_alpha']
+        self.beta_log_alpha = config['beta_log_alpha']
         self.encoder_tau = config['encoder_tau']
         self.critic_tau = config['critic_tau']
         self.actor_update_freq = config['actor_update_freq']
@@ -81,7 +82,7 @@ class CURL_SACAgent(object):
         self.optimizer_critic = optim.Adam(self.critic.parameters(), self.lr)
         self.optimizer_encoder = optim.Adam(self.encoder.parameters(), self.lr)
         self.optimizer_cpc = optim.Adam(self.CURL.parameters(), self.lr)
-        self.optimizer_logalpha = optim.Adam([self.log_alpha], self.lr_log_alpha)
+        self.optimizer_logalpha = optim.Adam([self.log_alpha], self.lr_log_alpha, betas=(self.beta_log_alpha, 0.999))
 
         self.update_count = 0
         self.log_loss = {

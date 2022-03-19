@@ -11,6 +11,7 @@ buffer_size: 100000
 gamma: 0.99
 lr: 0.001
 lr_log_alpha: 0.0001
+beta_log_alpha: 0.5
 cpc_update_freq: 1
 target_update_freq: 2
 batch_size: 32
