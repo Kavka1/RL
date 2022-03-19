@@ -96,8 +96,7 @@ def squash(mu: torch.tensor, pi: torch.tensor, log_prob: torch.tensor) -> Tuple:
     if pi is not None:
         pi = torch.tanh(pi)
     if log_prob is not None:
-        log_prob -= torch.log(1 - pi.pow(2) + 1e-6)
-        log_prob = log_prob.sum(-1, keepdim=True)
+        log_prob -= torch.log(1 - pi.pow(2) + 1e-6).sum(-1, keepdim=True)
     return mu, pi, log_prob
 
 

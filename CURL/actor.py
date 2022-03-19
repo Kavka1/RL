@@ -38,8 +38,9 @@ class Actor(nn.Module):
 
         mu, arctanh_log_std = self.trunk(x).chunk(2, dim=-1)
 
+        log_std = torch.clamp(arctanh_log_std, self.logstd_min, self.logstd_max)
         log_std = torch.tanh(arctanh_log_std)
-        log_std = self.logstd_min + 0.5 * (self.logstd_max - self.logstd_min) * (log_std + 1)
+        #log_std = self.logstd_min + 0.5 * (self.logstd_max - self.logstd_min) * (log_std + 1)
 
         self.outputs['mu'] = mu
         self.outputs['std'] = log_std.exp()
