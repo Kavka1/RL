@@ -10,9 +10,10 @@ buffer_size: 100000
 
 gamma: 0.99
 lr: 0.001
+lr_log_alpha: 0.0001
 cpc_update_freq: 1
 target_update_freq: 2
-batch_size: 128
+batch_size: 32
 device: 'cuda'
 
 encoder_feature_dim: 50
@@ -21,13 +22,13 @@ encoder_num_filters: 32
 encoder_tau: 0.05
 
 critic_tau: 0.01
-critic_hidden_size: 256
+critic_hidden_size: 1024
 critic_update_detach_encoder: False
 
-actor_hidden_size: 256
+actor_hidden_size: 1024
 actor_update_freq: 2
 logstd_min: -2
-logstd_max: 20
+logstd_max: 10
 
 max_timestep: 3000000
 train_start_step: 1000
