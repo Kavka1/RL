@@ -120,8 +120,10 @@ class CURL_SACAgent(object):
         loss_critic = F.mse_loss(q1_pred, q_trg) + F.mse_loss(q2_pred, q_trg)
 
         self.optimizer_critic.zero_grad()
+        self.optimizer_encoder.zero_grad()
         loss_critic.backward()
         self.optimizer_critic.step()
+        self.optimizer_encoder.step()
 
         self.log_loss['loss_critic'] = loss_critic.detach().cpu().item()
 
@@ -132,7 +134,7 @@ class CURL_SACAgent(object):
         q1_value, q2_value = self.critic(obs, pi, detach_encoder=True)
         q_value = torch.min(q1_value, q2_value)
 
-        loss_actor = (self.log_alpha.exp().detach() * log_prob - q_value.mean()).mean()
+        loss_actor = (self.log_alpha.exp().detach() * log_prob - q_value).mean()
         self.optimizer_actor.zero_grad()
         loss_actor.backward()
         self.optimizer_actor.step()

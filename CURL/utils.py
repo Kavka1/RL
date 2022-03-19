@@ -1,7 +1,6 @@
 from copy import deepcopy
 from typing import Dict, List, Tuple
 from collections import deque
-from cv2 import exp
 import numpy as np
 import torch
 import gym
