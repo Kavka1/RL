@@ -30,7 +30,7 @@ actor_update_freq: 2
 logstd_min: -2
 logstd_max: 10
 
-max_timestep: 3000000
+max_timestep: 4000000
 train_start_step: 1000
 save_interval: 5000
 
