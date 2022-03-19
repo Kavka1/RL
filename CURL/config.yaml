@@ -1,0 +1,35 @@
+domain_name: 'cheetah'
+task_name:  'run'
+seed: 1
+frame_stack: 3
+
+pre_transform_image_size: 100
+image_size: 84
+
+buffer_size: 100000
+
+gamma: 0.99
+lr: 1e-3
+cpc_update_freq: 1
+target_update_freq: 2
+batch_size: 128
+device: 'cuda'
+
+encoder_feature_dim: 50
+encoder_num_layers: 4
+encoder_num_filters: 32
+encoder_tau: 0.05
+
+critic_tau: 0.01
+critic_hidden_size: 256
+critic_update_detach_encoder: False
+
+actor_hidden_size: 256
+actor_update_freq: 2
+logstd_min: -2
+logstd_max: 20
+
+max_timestep: 3000000
+train_start_step: 1000
+
+result_path: '/home/xukang/GitRepo/RL/CURL/results/'
