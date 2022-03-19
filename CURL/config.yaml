@@ -4,12 +4,12 @@ seed: 1
 frame_stack: 3
 
 pre_transform_image_size: 100
-image_size: 84
+img_size: 84
 
 buffer_size: 100000
 
 gamma: 0.99
-lr: 1e-3
+lr: 0.001
 cpc_update_freq: 1
 target_update_freq: 2
 batch_size: 128
@@ -31,5 +31,6 @@ logstd_max: 20
 
 max_timestep: 3000000
 train_start_step: 1000
+save_interval: 5000
 
 result_path: '/home/xukang/GitRepo/RL/CURL/results/'

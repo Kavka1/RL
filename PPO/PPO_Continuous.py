@@ -129,15 +129,15 @@ class PPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
 
 def main():
-    env_name = 'BipedalWalker-v3'
-    render = True
-    solved_reward = 300
+    env_name = 'Halfcheetah-v2'
+    render = False
+    solved_reward = 2000
     log_interval = 20 #print avg reward in the interval
     max_episodes = 10000
     max_timesteps = 1500
 
     update_timesteps = 4000
-    action_std = 0.5
+    action_std = 0.3
     K_epochs = 80
     epsilon_clip = 0.2
     gamma = 0.99

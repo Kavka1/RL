@@ -22,11 +22,11 @@ class ReplayBuffer(Dataset):
         self.batch_size = batch_size
         self.img_size = img_size
 
-        obs_dtype = np.float32 if len(obs_shape) == 1 else np.int8
+        obs_dtype = np.float32 if len(preaug_obs_shape) == 1 else np.int8
 
-        self.obs_buf = np.empty((capacity, *obs_shape), dtype=obs_dtype)
+        self.obs_buf = np.empty((capacity, *preaug_obs_shape), dtype=obs_dtype)
         self.a_buf = np.empty((capacity, a_dim), dtype=np.float32)
-        self.next_obs_buf = np.empty((capacity, *obs_shape), dtype=obs_dtype)
+        self.next_obs_buf = np.empty((capacity, *preaug_obs_shape), dtype=obs_dtype)
         self.r_buf = np.empty((capacity, 1), dtype=np.float32)
         self.notdone_buf = np.empty((capacity, 1), dtype=np.float32)
 
@@ -41,10 +41,10 @@ class ReplayBuffer(Dataset):
         np.copyto(self.next_obs_buf[self.idx], obs_)
 
         self.idx = (self.idx + 1) % self.capacity
-        self.full = self.full or self.idx == 0
+        self.is_full = self.is_full or (self.idx == 0)
 
     def sample_cpc(self, device: torch.device) -> Tuple:
-        idxs = np.random.randint(0, self.capacity if self.full else self.idx, self.batch_size)
+        idxs = np.random.randint(0, self.capacity if self.is_full else self.idx, self.batch_size)
 
         obs_batch = self.obs_buf[idxs]
         pos = obs_batch.copy()

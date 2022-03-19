@@ -1,5 +1,7 @@
+from copy import deepcopy
 from typing import Dict, List, Tuple
 from collections import deque
+from cv2 import exp
 import numpy as np
 import torch
 import gym
@@ -26,17 +28,18 @@ def seed_all(seed: int) -> None:
 
 def get_env_params(env: gym.Env) -> Dict:
     return {
-        'preaug_obs_shape': env.observation_space.shape,
+        'preaug_obs_shape': list(env.observation_space.shape),
         'a_dim': env.action_space.shape[0],
-        'action_bound': env.action_space.high[0]
+        'action_bound': float(env.action_space.high[0])
     }
 
 
 def make_exp_path(config: Dict) -> Dict:
     exp_path = config['result_path'] + f"{config['domain_name']}-{config['task_name']}_{config['seed']}"
-    if os.path.exists(exp_path):
-        exp_path = exp_path = '_*'
+    while os.path.exists(exp_path):
+        exp_path = exp_path + '_*'
     exp_path += '/'
+    os.makedirs(exp_path)
     config.update({
         'exp_path': exp_path
     })
@@ -44,9 +47,11 @@ def make_exp_path(config: Dict) -> Dict:
 
 
 def save_config_and_env_params(config: Dict, env_params: Dict) -> None:
-    config.update(env_params)
+    config.update({
+        'env_params': env_params
+    })
     with open(config['exp_path'] + 'config.yaml', 'w', encoding='utf-8') as f:
-        yaml.safe_dump(config, f)
+        yaml.dump(config, f, indent=2)
 
 
 def tie_weights(trg: nn.Module, src: nn.Module) -> None:
@@ -84,7 +89,7 @@ def reparameterize(mu: torch.tensor, std: torch.tensor, return_noise: bool = Tru
 
 def compute_gaussian_logprob(noise: torch.tensor, log_std: torch.tensor) -> torch.tensor:
     # noise denotes to the x = mu + "noise" * std
-    return (- 0.5 * noise ** 2 - log_std).sum(-1, keepdim = True) - 0.5 * torch.log(2 * torch.pi) * noise.size(-1)
+    return (- 0.5 * noise ** 2 - log_std).sum(-1, keepdim = True) - 0.5 * np.log(2 * np.pi) * noise.size(-1)
 
 
 def squash(mu: torch.tensor, pi: torch.tensor, log_prob: torch.tensor) -> Tuple:
@@ -98,7 +103,7 @@ def squash(mu: torch.tensor, pi: torch.tensor, log_prob: torch.tensor) -> Tuple:
 
 class FrameStack(gym.Wrapper):
     def __init__(self, env, k) -> None:
-        super().__init__(self, env)
+        gym.Wrapper.__init__(self, env)
         self._env = env
         self.k = k
 

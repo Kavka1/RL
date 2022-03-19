@@ -43,7 +43,7 @@ class CURL_SACAgent(object):
             config['encoder_num_filters'],
             output_logits= True
         ).to(self.device)
-        self.encoder_trg.load_state_dict(self.encoder)
+        self.encoder_trg.load_state_dict(self.encoder.state_dict())
 
         self.critic = Critic(
             self.encoder,
@@ -55,7 +55,7 @@ class CURL_SACAgent(object):
             self.a_dim,
             config['critic_hidden_size']
         ).to(self.device)
-        self.critic_trg.load_state_dict(self.critic)
+        self.critic_trg.load_state_dict(self.critic.state_dict())
 
         self.actor = Actor(
             self.encoder, 
@@ -65,7 +65,8 @@ class CURL_SACAgent(object):
             self.logstd_min
         ).to(self.device)
 
-        self.log_alpha = torch.tensor(np.log(0.01), requires_grad= True).to(self.device)
+        self.log_alpha = torch.tensor(np.log(0.01)).to(self.device)
+        self.log_alpha.requires_grad = True
         self.target_entropy = - torch.tensor(self.a_dim).float()
 
         self.CURL = CURL_model(
@@ -86,7 +87,8 @@ class CURL_SACAgent(object):
             'loss_critic': 0,
             'loss_actor': 0,
             'loss_alpha': 0,
-            'loss_cpc': 0
+            'loss_cpc': 0,
+            'alpha': self.log_alpha.exp().detach().cpu().item()
         }
 
     def selection_action(self, obs: np.array, output_mu: bool = False) -> np.array:
@@ -119,7 +121,7 @@ class CURL_SACAgent(object):
         loss_critic.backward()
         self.optimizer_critic.step()
 
-        self.log_loss['loss_citic'] = loss_critic.detach().cpu().item()
+        self.log_loss['loss_critic'] = loss_critic.detach().cpu().item()
 
     def update_actor_alpha(self, obs: torch.tensor) -> None:
         mu, pi, log_prob, log_std = self.actor(obs,
@@ -140,6 +142,7 @@ class CURL_SACAgent(object):
 
         self.log_loss['loss_actor'] = loss_actor.cpu().detach().item()
         self.log_loss['loss_alpha'] = loss_alpha.cpu().detach().item()
+        self.log_loss['alpha'] = self.log_alpha.exp().detach().cpu().item()
 
     def update_cpc(self, obs_anchor: torch.tensor, obs_pos: torch.tensor) -> float:
         z_a = self.encoder(obs_anchor)
@@ -158,7 +161,7 @@ class CURL_SACAgent(object):
         self.log_loss['loss_cpc'] = loss.cpu().detach().item()
 
     def update(self, buffer) -> Dict:
-        obs, action, reward, next_obs, not_done, cpc_kwargs = buffer.sample_cpc()
+        obs, action, reward, next_obs, not_done, cpc_kwargs = buffer.sample_cpc(self.device)
 
         self.update_critic(obs, action, reward, next_obs, not_done)
 
@@ -175,3 +178,8 @@ class CURL_SACAgent(object):
 
         self.update_count += 1
         return self.log_loss
+
+    def save(self, path: str, remark: str) -> None:
+        torch.save(self.encoder.state_dict(), f"{path}encoder_{remark}.pt")
+        torch.save(self.actor.state_dict(), f"{path}actor_{remark}.pt")
+        print(f"---Encoder and policy {remark} saved to {path}-----")

@@ -52,7 +52,7 @@ class PixelEncoder(nn.Module):
         h = conv.view(conv.size(0), -1)
         return h
 
-    def __forward__(self, obs: torch.tensor, detach_conv: bool = False) -> torch.tensor:
+    def __call__(self, obs: torch.tensor, detach_conv: bool = False) -> torch.tensor:
         h = self.encode(obs)
         if detach_conv:
             h = h.detach()
@@ -68,7 +68,3 @@ class PixelEncoder(nn.Module):
             self.outputs['tanh'] = out
 
         return out
-
-    def tie_conv_to_encoder(self, src_encoder) -> None:
-        for i in range(self.num_layers):
-            tie_weights(trg = src_encoder.convs[i], src = self.convs[i])

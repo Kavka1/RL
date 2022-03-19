@@ -33,7 +33,7 @@ class Actor(nn.Module):
         self.outputs = dict()
         self.apply(weight_init)
 
-    def __forward__(self, obs: torch.tensor, detach_encoder: bool, compute_pi: bool , compute_log_prob: bool) -> Tuple:
+    def __call__(self, obs: torch.tensor, detach_encoder: bool, compute_pi: bool , compute_log_prob: bool) -> Tuple:
         x = self.encoder(obs, detach_encoder)
 
         mu, arctanh_log_std = self.trunk(x).chunk(2, dim=-1)
