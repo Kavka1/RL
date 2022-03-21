@@ -33,6 +33,6 @@ logstd_max: 10
 
 max_timestep: 4000000
 train_start_step: 1000
-save_interval: 5000
+save_interval: 50000
 
 result_path: '/home/xukang/GitRepo/RL/CURL/results/'
