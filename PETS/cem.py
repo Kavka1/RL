@@ -14,7 +14,7 @@ class CEMOptimizer:
         upper_bound: np.array,
         lower_bound: np.array,
         epsilon: float = 1e-3,
-        alpha: float = 0.25
+        alpha: float = 0.1
     ) -> None:
         self.solution_dim   =       solution_dim
         self.max_iter       =       max_iter

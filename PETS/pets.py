@@ -21,16 +21,14 @@ class PETS(Module):
         self.a_lb  = np.ones((self.a_dim)) * self.a_bound
         self.a_ub  = - np.ones((self.a_dim)) * self.a_bound
 
-        self.horizon = config['horizon']
-        self.n_particel = config['n_partical']
-        self.device = config['device']
+        self.horizon    = config['horizon']
+        self.n_particel = config['n_particel']
+        self.device     = config['device']
 
         self.current_s = None
         self.action_buf = np.array([]).reshape(0, self.a_dim)
         self.prev_sol = np.tile((self.a_ub + self.a_lb) / 2, [self.horizon])
         self.init_var = np.tile(np.square(self.a_ub - self.a_lb) / 16, [self.horizon])
-
-        self.has_been_trained = True
 
         self.model = BatchGaussianEnsemble(
             self.s_dim,
@@ -66,47 +64,38 @@ class PETS(Module):
         self.init_var = np.tile(np.square(self.a_ub + self.a_lb) / 16, [self.horizon])
 
     def get_action(self, states: np.array) -> np.array:
-        if not self.has_been_trained:
-            return torch.rand((states.shape[0], self.a_dim), device=self.device) # * - 1
         if self.action_buf.shape[0] > 0:
             action, self.action_buf = self.action_buf[0], self.action_buf[1:]
             action = torch.from_numpy(action).unsqueeze(0)
             return action
 
-        self.cur_states = states
+        self.cur_states = torch.from_numpy(states).to(self.device).float()
         solution = self.cem.obtain_solution(self.prev_sol, self.init_var)       # [n_horizon * a_dim]
         self.prev_sol = np.concatenate([np.copy(solution)[self.a_dim:], np.zeros(self.a_dim, dtype=np.float32)])
         self.action_buf = solution[: self.a_dim].reshape(-1, self.a_dim)
         return self.get_action(states)
 
-    def update(self, buffer) -> List[float]:
-        self.has_been_trained = True
-        return self.model.train(buffer)
+    def update(self, buffer, num_step: int) -> List[float]:
+        return self.model.train(buffer, num_step)
 
     @torch.no_grad()
     def _eval_action_seq(self, a_seq: np.array) -> np.array:
         n_opt = a_seq.shape[0]
-        actions_sequences = torch.from_numpy(a_seq).float().to(self.device)
-        # shape = [population_size, plan_horizon, d_action]
-        actions_sequences = actions_sequences.view(-1, self.horizon, self.a_dim)
-        transposed = actions_sequences.transpose(0, 1)
-        expanded = transposed[:, :, None]
+        actions_sequences   = torch.from_numpy(a_seq).float().to(self.device)               # [pop_size, horizon, a_dim]
+        actions_sequences   = actions_sequences.view(-1, self.horizon, self.a_dim)
+        transposed          = actions_sequences.transpose(0, 1)
+        expanded            = transposed[:, :, None]
 
-        tiled = expanded.expand(-1, -1, self.n_part, -1)
-        # shape = [plan_horizon, population_size * n_particles, d_action]
-        actions_sequences = tiled.contiguous().view(self.plan_hor, -1, self.d_action)
-        # shape = [1, d_state] --> [population_size * n_particles, d_state]
-        cur_states = self.cur_states.to(self.device)
-        cur_states = cur_states.expand(n_opt * self.n_part, -1)
+        tiled               = expanded.expand(-1, -1, self.n_particel, -1)                  # [horizon, pop_size, n_particel, a_dim]  
+        actions_sequences   = tiled.contiguous().view(self.horizon, -1, self.a_dim)         # [horizon, pop * part, a_dim]
+        
+        cur_states          = self.cur_states.expand(n_opt * self.n_particel, -1).to(self.device)    # [pop * part, s_dim]
 
-        costs = torch.zeros(n_opt, self.n_part, device=self.device)
-
-        for t in range(self.plan_hor):
-            cur_acs = actions_sequences[t]
-            next_states = self.model.sample(cur_states, cur_acs)
-
-            step_rewards = self.task(cur_states, cur_acs, next_states)
-            step_rewards = step_rewards.reshape([-1, self.n_part])
+        costs = torch.zeros(n_opt, self.n_particel, device=self.device)
+        for t in range(self.horizon):
+            cur_acs                 =   actions_sequences[t]
+            next_states, rewards    =   self.model.sample(cur_states, cur_acs)              # [pop * part, s_dim], [pop * part, 1]
+            step_rewards            =   rewards.reshape([-1, self.n_part])                  # [pop, part]
 
             costs += step_rewards
             cur_states = next_states

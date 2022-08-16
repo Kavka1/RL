@@ -165,7 +165,7 @@ class BatchGaussianEnsemble(Module):
 
     def train(self, buffer: Buffer, steps: int) -> List[float]:
         n = len(buffer)
-        state, action, reward, done, delta_state = buffer.sample_all()
+        state, action, reward, delta_state = buffer.sample_all()
         # transfer to tensor
         state       = torch.tensor(state, device=self.device).float()
         action      = torch.tensor(action, device=self.device).float()
