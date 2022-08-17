@@ -2,6 +2,7 @@ from typing import Dict
 import numpy as np
 import torch
 import yaml
+from copy import copy
 import datetime
 import gym
 from torch.utils.tensorboard import SummaryWriter
@@ -42,7 +43,7 @@ def train(config: Dict) -> None:
     config['model_config'].update({
         's_dim':   env.observation_space.shape[0],
         'a_dim':   env.action_space.shape[0],
-        'a_bound': env.action_space.high[0],
+        'a_bound': copy(env.action_space.high[0]),
     })
 
     confirm_path(config['exp_path'])
@@ -117,6 +118,39 @@ def train(config: Dict) -> None:
 
 
 
+def demo(exp_path: str, model_mark: str) -> None:
+    with open(exp_path + 'config.yaml', 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+    
+    env = gym.make(config['env'])
+
+    if config['use_gt_reward_func']:
+        if config['env'] == 'InvertedPendulum-v4':
+            agent = PETS(config, task_reward_for_inverted_pendulum)
+        elif config['env'] == 'CartPole-v1':
+            agent = PETS(config, task_reward_for_cartpole)
+        elif config['env'] == 'Reacher-v4':
+            agent = PETS(config, task_reward_for_reacher)
+        else:
+            raise NotImplementedError(f"Invalid env name {config['env']}")
+    else:
+        agent   = PETS(config)
+    
+    agent.load(exp_path + f'model/{model_mark}.pt', map_location='cpu')
+
+    for _ in range(100):
+        episode_r = 0
+        done = False
+        s = env.reset()
+        while not done:
+            env.render()
+            a = agent.get_action(s)
+            s, r, done, info = env.step(a.detach().cpu().numpy())
+            episode_r += r
+        print(f"Episode {_} Return: {episode_r}")
+
+
+
 
 if __name__ == '__main__':
     config = {
@@ -166,4 +200,5 @@ if __name__ == '__main__':
         'result_path': '/home/xukang/GitRepo/RL/PETS/results/'
     }
 
-    train(config)
+    #train(config)
+    #demo('/home/xukang/GitRepo/RL/PETS/results/Reacher-v4_08-17-15-32-37/', 5000)

@@ -1,7 +1,6 @@
 from typing import Callable, List, Dict, Tuple
 import torch
 import torch.nn as nn
-from RL.PETS.utils import confirm_path
 
 
 def init_weight(layer, initializer="he normal"):
