@@ -13,7 +13,7 @@ from RL.PETS.cem import CEMOptimizer
 
 
 class PETS(Module):
-    def __init__(self, config: Dict) -> None:
+    def __init__(self, config: Dict, gt_cost_func: Callable = None) -> None:
         super().__init__()
         self.s_dim = config['model_config']['s_dim']
         self.a_dim = config['model_config']['a_dim']
@@ -30,6 +30,8 @@ class PETS(Module):
         self.prev_sol = np.tile((self.a_ub + self.a_lb) / 2, [self.horizon])
         self.init_var = np.tile(np.square(self.a_ub - self.a_lb) / 16, [self.horizon])
 
+        self.gt_cost_func = gt_cost_func
+
         self.model = BatchGaussianEnsemble(
             self.s_dim,
             self.a_dim,
@@ -44,6 +46,7 @@ class PETS(Module):
             config['log_var_bound_weight'],
             config['batch_size'],
             config['learning_rate'],
+            config['param_reg_weight'],
             optim.Adam
         )
 
@@ -53,8 +56,8 @@ class PETS(Module):
             config['cem_pop_size'],
             config['cem_num_elites'],
             self._eval_action_seq,
-            self.a_ub,
-            self.a_lb,
+            np.tile(self.a_ub, [self.horizon]),
+            np.tile(self.a_lb, [self.horizon]),
         )
 
         self.to(self.device)
@@ -66,7 +69,7 @@ class PETS(Module):
     def get_action(self, states: np.array) -> np.array:
         if self.action_buf.shape[0] > 0:
             action, self.action_buf = self.action_buf[0], self.action_buf[1:]
-            action = torch.from_numpy(action).unsqueeze(0)
+            action = torch.from_numpy(action)
             return action
 
         self.cur_states = torch.from_numpy(states).to(self.device).float()
@@ -94,8 +97,12 @@ class PETS(Module):
         costs = torch.zeros(n_opt, self.n_particel, device=self.device)
         for t in range(self.horizon):
             cur_acs                 =   actions_sequences[t]
-            next_states, rewards    =   self.model.sample(cur_states, cur_acs)              # [pop * part, s_dim], [pop * part, 1]
-            step_rewards            =   rewards.reshape([-1, self.n_part])                  # [pop, part]
+            next_states, rewards    =   self.model.sample(cur_states, cur_acs)              # [pop * part, s_dim], [pop * part]
+
+            if self.gt_cost_func:                                                           # using the ground truth rewards
+                rewards = self.gt_cost_func(next_states.detach().cpu().numpy(), cur_acs.detach().cpu().numpy())
+                rewards = torch.from_numpy(rewards).to(self.device).float()
+            step_rewards            =   rewards.reshape([-1, self.n_particel])              # [pop, part]
 
             costs += step_rewards
             cur_states = next_states

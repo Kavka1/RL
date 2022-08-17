@@ -23,7 +23,7 @@ class BatchedLinear(nn.Module):
         self.ensemble_size      =       ensemble_size
         self.in_dim             =       in_dim
         self.out_dim            =       out_dim
-        self.weight             =       nn.Parameter(torch.empty(ensemble_size, in_dim, out_dim))
+        self.weight             =       nn.Parameter(torch.empty(ensemble_size, out_dim, in_dim))
         self.bias               =       nn.Parameter(torch.empty(ensemble_size, out_dim))
         # weight initialization
         init_weight(self.weight, initializer)
@@ -32,7 +32,7 @@ class BatchedLinear(nn.Module):
     def forward(self, x: torch.tensor) -> torch.tensor:
         assert len(x.shape) == 3
         assert x.shape[0] == self.ensemble_size
-        return torch.bmm(x, self.weight) + self.bias.unsqueeze(1)
+        return torch.bmm(x, self.weight.transpose(1, 2)) + self.bias.unsqueeze(1)
 
 
 class BatchGaussianEnsemble(Module):
@@ -51,6 +51,7 @@ class BatchGaussianEnsemble(Module):
         log_var_bound_weight: float,
         batch_size: int,
         learning_rate: float,
+        param_reg_weight: float,
         optimizer_factory
     ) -> None:
         super().__init__()
@@ -105,7 +106,7 @@ class BatchGaussianEnsemble(Module):
             *self.mean_head.parameters(),
             *self.log_var_head.parameters(),
             self.min_log_var, self.max_log_var
-        ], self.learning_rate)
+        ], self.learning_rate, weight_decay = param_reg_weight)
 
     @property
     def total_batch_size(self,) -> float:

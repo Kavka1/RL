@@ -1,7 +1,7 @@
 from typing import Dict
 import numpy as np
 import torch
-import os
+import yaml
 import datetime
 import gym
 from torch.utils.tensorboard import SummaryWriter
@@ -10,8 +10,28 @@ from RL.PETS.pets import PETS
 from RL.PETS.utils import confirm_path
 
 
+def task_reward_for_inverted_pendulum(s: np.array, a: np.array = None) -> np.array:
+    assert len(s.shape) == 2
+    return np.array((np.abs(s[:, 1]) <= 0.2), dtype=np.float32)
+
+
+def task_reward_for_cartpole(s: np.array, a: np.array = None) -> np.array:
+    assert len(s.shape) == 2
+    car_pos, pole_theta = s[:, :1], s[:, 2:3]
+    ee_pos = np.concatenate([car_pos - 0.6 * np.sin(pole_theta), - 0.6 * np.cos(pole_theta)], axis=1)
+    return np.exp( - np.sum(np.square(ee_pos - np.array([0.0, 0.6])), axis=1) / (0.6 ** 2))
+
+
+def task_reward_for_reacher(s: np.array, a: np.array) -> np.array:
+    x_diff_to_goal = s[:, 8:9]
+    y_diff_to_goal = s[:, 9:10]
+    dist_reward = - (x_diff_to_goal ** 2 + y_diff_to_goal ** 2)
+    ctrl_reward = - np.sum(np.square(a), -1, keepdims=True)
+    return dist_reward + ctrl_reward
+
+
 def train(config: Dict) -> None:
-    config.update({'exp_path': config['result_path'] + f"{datetime.datetime.now().strftime('%m-%d-%H-%M-%S')}/"})
+    config.update({'exp_path': config['result_path'] + f"{config['env']}_{datetime.datetime.now().strftime('%m-%d-%H-%M-%S')}/"})
 
     env = gym.make(config['env'])
 
@@ -21,29 +41,48 @@ def train(config: Dict) -> None:
 
     config['model_config'].update({
         's_dim':   env.observation_space.shape[0],
-        'a_dim':   env.observation_space.shape[0],
+        'a_dim':   env.action_space.shape[0],
         'a_bound': env.action_space.high[0],
     })
+
+    confirm_path(config['exp_path'])
+    with open(config['exp_path'] + 'config.yaml', 'w', encoding='utf-8') as f:
+        yaml.dump(config, f, indent=2)
+
     # logger
     tb = SummaryWriter(config['exp_path'])
     # agent
-    agent   = PETS(config)
+    if config['use_gt_reward_func']:
+        if config['env'] == 'InvertedPendulum-v4':
+            agent = PETS(config, task_reward_for_inverted_pendulum)
+        elif config['env'] == 'CartPole-v1':
+            agent = PETS(config, task_reward_for_cartpole)
+        elif config['env'] == 'Reacher-v4':
+            agent = PETS(config, task_reward_for_reacher)
+        else:
+            raise NotImplementedError(f"Invalid env name {config['env']}")
+    else:
+        agent   = PETS(config)
+    
     buffer  = Buffer(config['buffer_size'])
 
     total_step = 0
     total_episode = 0
     episode_r = 0
-    best_episode_r_so_far = -100
+    best_episode_r_so_far = -1000
     loss_log = 0
     
     s = env.reset()
     while total_step <= config['max_timestep']:
+        if config['render']:
+            env.render()
+
         if total_step < config['warm_up_step']:
             a = env.action_space.sample()
         else:
             a = agent.get_action(s)
         s_, r, done, info = env.step(a)
-        buffer.store((s, s_, r, s_ - s))        
+        buffer.store((s, a, r, s_ - s))        
 
         if done:
             s = env.reset()
@@ -87,40 +126,44 @@ if __name__ == '__main__':
             'a_bound': None,
 
             'ensemble_size': 5,
-            'model_trunk_hiddens': [250, 250],
-            'model_head_hiddens': [250],
+            'model_trunk_hiddens': [200, 200, 200],
+            'model_head_hiddens': [200],
             'model_inner_nonlinear': 'ReLU',
             'model_initializer': 'he normal',
             'model_min_log_var': -10,
-            'model_max_log_var': 2,
+            'model_max_log_var': 1,
         },
 
-        'env': 'HalfCheetah-v2',
+        'env': 'Reacher-v4',
+        'use_gt_reward_func': True,
+        'render': False,
 
         'seed': 10,
         'device': 'cuda',
 
-        'horizon': 30,
+        'horizon': 25,
         'n_particel': 20,
-        'log_var_bound_weight': 0.01,
         'batch_size': 256,
         'learning_rate': 0.0001,
-        'train_iter': 300,
+        'log_var_bound_weight': 0.001,
+        'param_reg_weight': 0.00005,
+        'train_iter': 100,
 
-        'cem_max_iter': 5,
-        'cem_pop_size': 500,
-        'cem_num_elites': 50,
+        'cem_max_iter': 25,
+        'cem_pop_size': 400,
+        'cem_num_elites': 40,
 
-        'max_timestep': 300000,
-        'warm_up_step': 1000,
+        'max_timestep': 100000,
+        'buffer_size': 100000,
+        'warm_up_step': 300,
 
-        'train_freq': 25,
-        'train_start_step': 500,
+        'train_freq': 5,
+        'train_start_step': 300,
 
-        'log_freq': 200,
-        'save_freq': 20000,
+        'log_freq': 100,
+        'save_freq': 5000,
 
-        'results_path': '/home/xukang/GitRepo/RL/PETS/results/'
+        'result_path': '/home/xukang/GitRepo/RL/PETS/results/'
     }
 
     train(config)

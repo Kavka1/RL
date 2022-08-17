@@ -40,9 +40,9 @@ class CEMOptimizer:
             samples             =   dist.rvs(size=[self.pop_size, self.solution_dim]) * np.sqrt(constrained_var) + mean
             samples             =   samples.astype(np.float32)
 
-            costs               =   self.cost_func(samples)        #    [num_solution]
-
-            elites              =   samples[np.argsort(costs)][-self.num_elites:]
+            costs               =   self.cost_func(samples)        #    [num_solution
+            idx_sorted_costs    =   np.argsort(costs)
+            elites              =   samples[idx_sorted_costs][-self.num_elites:]
 
             new_mean            =   np.mean(elites, 0)
             new_var             =   np.var(elites, 0)
