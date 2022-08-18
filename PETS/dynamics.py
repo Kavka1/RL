@@ -166,16 +166,16 @@ class BatchGaussianEnsemble(Module):
 
     def train(self, buffer: Buffer, steps: int) -> List[float]:
         n = len(buffer)
-        state, action, reward, delta_state = buffer.sample_all()
+        state, action, reward, next_state = buffer.sample_all()
         # transfer to tensor
         state       = torch.tensor(state, device=self.device).float()
         action      = torch.tensor(action, device=self.device).float()
         reward      = torch.tensor(reward, device=self.device).unsqueeze(-1).float()
-        delta_state = torch.tensor(delta_state, device=self.device).float()
+        next_state  = torch.tensor(next_state, device=self.device).float()
         # fit the normalizer
         self.state_normalizer.fit(state)
         # targets: [next_state, reward]
-        target      = torch.cat([delta_state, reward], -1)
+        target      = torch.cat([next_state, reward], -1)
         all_losses  = []
         for _ in range(steps):
             indices = torch.randint(n, [self.total_batch_size], device=self.device)

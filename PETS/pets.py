@@ -69,7 +69,6 @@ class PETS(Module):
     def get_action(self, states: np.array) -> np.array:
         if self.action_buf.shape[0] > 0:
             action, self.action_buf = self.action_buf[0], self.action_buf[1:]
-            action = torch.from_numpy(action)
             return action
 
         self.cur_states = torch.from_numpy(states).to(self.device).float()
@@ -100,7 +99,11 @@ class PETS(Module):
             next_states, rewards    =   self.model.sample(cur_states, cur_acs)              # [pop * part, s_dim], [pop * part]
 
             if self.gt_cost_func:                                                           # using the ground truth rewards
-                rewards = self.gt_cost_func(next_states.detach().cpu().numpy(), cur_acs.detach().cpu().numpy())
+                rewards = self.gt_cost_func(
+                    cur_states.detach().cpu().numpy(), 
+                    cur_acs.detach().cpu().numpy(),
+                    next_states.detach().cpu().numpy()
+                )
                 rewards = torch.from_numpy(rewards).to(self.device).float()
             step_rewards            =   rewards.reshape([-1, self.n_particel])              # [pop, part]
 

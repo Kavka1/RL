@@ -2,28 +2,29 @@ from typing import Dict
 import numpy as np
 import torch
 import yaml
-from copy import copy
+import copy
 import datetime
 import gym
 from torch.utils.tensorboard import SummaryWriter
 from RL.PETS.buffer import Buffer
 from RL.PETS.pets import PETS
 from RL.PETS.utils import confirm_path
+from RL.PETS.env.halfcheetah import HalfCheetah, task_reward_for_halfcheetah
 
 
-def task_reward_for_inverted_pendulum(s: np.array, a: np.array = None) -> np.array:
+def task_reward_for_inverted_pendulum(s: np.array, a: np.array = None, s_: np.array = None) -> np.array:
     assert len(s.shape) == 2
     return np.array((np.abs(s[:, 1]) <= 0.2), dtype=np.float32)
 
 
-def task_reward_for_cartpole(s: np.array, a: np.array = None) -> np.array:
+def task_reward_for_cartpole(s: np.array, a: np.array = None, s_: np.array = None) -> np.array:
     assert len(s.shape) == 2
     car_pos, pole_theta = s[:, :1], s[:, 2:3]
     ee_pos = np.concatenate([car_pos - 0.6 * np.sin(pole_theta), - 0.6 * np.cos(pole_theta)], axis=1)
     return np.exp( - np.sum(np.square(ee_pos - np.array([0.0, 0.6])), axis=1) / (0.6 ** 2))
 
 
-def task_reward_for_reacher(s: np.array, a: np.array) -> np.array:
+def task_reward_for_reacher(s: np.array, a: np.array, s_: np.array = None) -> np.array:
     x_diff_to_goal = s[:, 8:9]
     y_diff_to_goal = s[:, 9:10]
     dist_reward = - (x_diff_to_goal ** 2 + y_diff_to_goal ** 2)
@@ -31,10 +32,14 @@ def task_reward_for_reacher(s: np.array, a: np.array) -> np.array:
     return dist_reward + ctrl_reward
 
 
+
 def train(config: Dict) -> None:
     config.update({'exp_path': config['result_path'] + f"{config['env']}_{datetime.datetime.now().strftime('%m-%d-%H-%M-%S')}/"})
 
-    env = gym.make(config['env'])
+    if config['env'] == 'HalfCheetah':
+        env = HalfCheetah()
+    else:
+        env = gym.make(config['env'])
 
     np.random.seed(config['seed'])
     torch.manual_seed(config['seed'])
@@ -43,7 +48,7 @@ def train(config: Dict) -> None:
     config['model_config'].update({
         's_dim':   env.observation_space.shape[0],
         'a_dim':   env.action_space.shape[0],
-        'a_bound': copy(env.action_space.high[0]),
+        'a_bound': copy.deepcopy(float(env.action_space.high[0])),
     })
 
     confirm_path(config['exp_path'])
@@ -60,6 +65,8 @@ def train(config: Dict) -> None:
             agent = PETS(config, task_reward_for_cartpole)
         elif config['env'] == 'Reacher-v4':
             agent = PETS(config, task_reward_for_reacher)
+        elif config['env'] == 'HalfCheetah':
+            agent = PETS(config, task_reward_for_halfcheetah)
         else:
             raise NotImplementedError(f"Invalid env name {config['env']}")
     else:
@@ -83,7 +90,7 @@ def train(config: Dict) -> None:
         else:
             a = agent.get_action(s)
         s_, r, done, info = env.step(a)
-        buffer.store((s, a, r, s_ - s))        
+        buffer.store((s, a, r, s_))        
 
         if done:
             s = env.reset()
@@ -168,37 +175,37 @@ if __name__ == '__main__':
             'model_max_log_var': 1,
         },
 
-        'env': 'Reacher-v4',
+        'env': 'HalfCheetah',
         'use_gt_reward_func': True,
         'render': False,
 
         'seed': 10,
         'device': 'cuda',
 
-        'horizon': 25,
+        'horizon': 20,
         'n_particel': 20,
         'batch_size': 256,
         'learning_rate': 0.0001,
         'log_var_bound_weight': 0.001,
         'param_reg_weight': 0.00005,
-        'train_iter': 100,
 
-        'cem_max_iter': 25,
-        'cem_pop_size': 400,
-        'cem_num_elites': 40,
+        'cem_max_iter': 10,
+        'cem_pop_size': 300,
+        'cem_num_elites': 30,
 
         'max_timestep': 100000,
         'buffer_size': 100000,
-        'warm_up_step': 300,
+        'warm_up_step': 1000,
 
-        'train_freq': 5,
-        'train_start_step': 300,
+        'train_freq': 25,
+        'train_iter': 200,
+        'train_start_step': 500,
 
         'log_freq': 100,
-        'save_freq': 5000,
+        'save_freq': 1000,
 
         'result_path': '/home/xukang/GitRepo/RL/PETS/results/'
     }
 
-    #train(config)
-    #demo('/home/xukang/GitRepo/RL/PETS/results/Reacher-v4_08-17-15-32-37/', 5000)
+    train(config)
+    #demo('/home/xukang/GitRepo/RL/PETS/results/Reacher-v4_08-18-12-19-37/', 10000)
