@@ -29,7 +29,8 @@ class BatchGaussianEnsemble(Module):
         param_reg_weight: float,
         optimizer_factory,
         elite_size: int,
-        device: str
+        device: str,
+        use_action_normalization: bool
     ) -> None:
         super().__init__()
 
@@ -38,9 +39,11 @@ class BatchGaussianEnsemble(Module):
         self.elite_size         =   elite_size
         in_dim, out_dim         =   s_dim + a_dim, s_dim + 1
         self.device             =   torch.device(device)
-        
+        self.use_action_norm    =   use_action_normalization
+
         self.state_normalizer = Normalizer(s_dim)
-        self.action_normalizer= Normalizer(a_dim)
+        if self.use_action_norm:
+            self.action_normalizer= Normalizer(a_dim)
         
         self.min_log_var = nn.Parameter(torch.full([out_dim], init_min_log_var, device=self.device).float(), requires_grad=True)
         self.max_log_var = nn.Parameter(torch.full([out_dim], init_max_log_var, device=self.device).float(), requires_grad=True)
@@ -93,8 +96,9 @@ class BatchGaussianEnsemble(Module):
 
     def forward_single(self, state: torch.tensor, action: torch.tensor, model_index: int) -> Tuple:
         normalized_state    = self.state_normalizer(state)
-        normalized_action   = self.action_normalizer(action)
-        inputs = torch.cat([normalized_state, normalized_action], dim=-1)
+        if self.use_action_norm:
+            action   = self.action_normalizer(action)
+        inputs = torch.cat([normalized_state, action], dim=-1)
         batch_size = inputs.shape[0]
         # forward
         embed_feature   =   unbatch_forward(self.trunk, inputs, model_index)
@@ -108,8 +112,9 @@ class BatchGaussianEnsemble(Module):
 
     def forward_all(self, state: torch.tensor, action: torch.tensor) -> Tuple:
         normalized_state    =   self.state_normalizer(state)
-        normalized_action   =   self.action_normalizer(action)
-        inputs              =   torch.cat([normalized_state, normalized_action], -1)
+        if self.use_action_norm:
+            action   = self.action_normalizer(action)
+        inputs              =   torch.cat([normalized_state, action], -1)
         batch_size          =   inputs.shape[1]
         # forward
         embed_feature       =   self.trunk(inputs)
@@ -172,7 +177,8 @@ class BatchGaussianEnsemble(Module):
         target      = torch.cat([next_state, reward], -1)
         # fit the normalizer
         self.state_normalizer.fit(state)
-        self.action_normalizer.fit(action)
+        if self.use_action_norm:
+            self.action_normalizer.fit(action)
         # split the samples
         num_holdout = int(hold_ratio * n)
         train_state, train_action       =   state[num_holdout:, :], action[num_holdout:, :]

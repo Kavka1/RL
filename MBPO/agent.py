@@ -108,7 +108,8 @@ class MBPO_Agent:
             self.model_config['dynamics_weight_decay_coeff'],
             optim.Adam,
             self.model_config['dynamics_elite_size'],
-            self.device
+            self.device,
+            self.model_config['dynamics_use_action_normalization']
         ).to(self.device)
 
         self.env_buffer         =   Buffer(config['env_buffer_size'])

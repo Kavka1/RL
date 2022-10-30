@@ -98,6 +98,7 @@ if __name__ == '__main__':
             'dynamics_init_max_log_var': 0.5,
             'dynamics_log_var_bound_weight': 0.01,
             'dynamics_weight_decay_coeff': 0.00005,
+            'dynamics_use_action_normalization': False,
         },
 
         'device': 'cuda',
