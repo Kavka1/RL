@@ -357,7 +357,6 @@ class Dreamer(nn.Module):
         # print(colored(f'[{step}]', 'red'), ' / '.join(f'{k} {v:.1f}' for k, v in metrics))
         self.writer.flush()
 
-    
     @torch.no_grad()
     def scalar_summaries(
           self, data, feat, prior_dist, post_dist, likes, div,
@@ -375,7 +374,6 @@ class Dreamer(nn.Module):
         self.metrics['value_loss'].update_state(value_loss)
         self.metrics['actor_loss'].update_state(actor_loss)
         self.metrics['action_ent'].update_state(self.actor(feat).base_dist.base_dist.entropy().sum(dim=-1).mean())
-
 
     @torch.no_grad()
     def image_summaries(self, data, embed, image_pred, video_path):

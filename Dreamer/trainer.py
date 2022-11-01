@@ -51,7 +51,7 @@ class Trainer:
 
         # Agent
         print('Creating agent...')
-        self.agent = Dreamer(self.c, self.train_env.action_space, self.writer, self.logdir)
+        self.agent = Dreamer(self.c, self.train_env.action_space, self.writer, self.logdir).to(self.c.device)
 
     def train(self) -> None:
         self.global_steps   = 0

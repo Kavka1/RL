@@ -163,7 +163,7 @@ class ActionDecoder(nn.Module):
         x = self.fc_output(x)
 
         if self.dist == 'tanh_normal':
-            mean, std = x.chunk(x, dim=-1)
+            mean, std = x.chunk(2, dim=-1)
             mean      = self.mean_scale * torch.tanh(mean / self.mean_scale)
             std       = nn.functional.softplus(std + self.raw_init_std) + self.min_std
             dist      = Normal(mean, std)
