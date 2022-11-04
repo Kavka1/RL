@@ -14,11 +14,11 @@ from torch import Tensor
 from torch.utils.tensorboard import SummaryWriter
 from torch.distributions     import kl_divergence
 
-from RL.Dreamer.model.module import ConvEncoder, ConvDecoder, DenseDecoder, ActionDecoder
-from RL.Dreamer.model.rssm   import RSSM
-from RL.Dreamer.config       import Config
-from RL.Dreamer.buffer       import ReplayBuffer
-from RL.Dreamer.utils        import AverageMeter, AttrDict, freeze
+from RL.Dreamerv2.model.module import ConvEncoder, ConvDecoder, DenseDecoder, ActionDecoder
+from RL.Dreamerv2.model.rssm   import RSSM
+from RL.Dreamerv2.config       import Config
+from RL.Dreamerv2.buffer       import ReplayBuffer
+from RL.Dreamerv2.utils        import AverageMeter, AttrDict, freeze
 
 
 act_dict = {
@@ -27,7 +27,7 @@ act_dict = {
 }
 
 
-class Dreamer(nn.Module):
+class DreamerV2(nn.Module):
     def __init__(
         self,
         config:         Config,
@@ -50,21 +50,26 @@ class Dreamer(nn.Module):
         cnn_activation = act_dict[self.c.cnn_act]
         act            = act_dict[self.c.dense_act]
         # model
-        feature_size = self.c.stoch_size + self.c.deter_size
+        feature_size = int(self.c.cat_size * self.c.cla_size + self.c.deter_size)
         self.encoder   = ConvEncoder(
-            depth       = self.c.cnn_depth, 
-            activation  = cnn_activation
+            input_shape     = (3, 64, 64),
+            embedding_size  = self.c.embed_size,
+            depth           = self.c.cnn_depth, 
+            activation      = cnn_activation
         )
         self.decoder = ConvDecoder(
             feature_dim = feature_size,
+            output_shape= (3, 64, 64),
             depth       = self.c.cnn_depth,
             activation  = cnn_activation
         )
         self.dynamics  = RSSM(
-            a_dim   =   self.a_dim,
-            stoch   =   self.c.stoch_size,
-            deter   =   self.c.deter_size,
-            hidden  =   self.c.deter_size
+            a_dim           =   self.a_dim,
+            class_size      =   self.c.cla_size,
+            category_size   =   self.c.cat_size,
+            deter           =   self.c.deter_size,
+            hidden          =   self.c.hidden_size,
+            embed           =   self.c.embed_size
         )
         self.reward = DenseDecoder(
             input_dim   =   feature_size,
@@ -98,6 +103,15 @@ class Dreamer(nn.Module):
             units       =   self.c.num_units,
             activation  =   act
         )
+        if self.c.use_value_target:
+            self.target_value = DenseDecoder(
+                input_dim   =   feature_size,
+                shape       =   (),
+                layers      =   3,
+                units       =   self.c.num_units,
+                activation  =   act
+            )
+            self.target_value.load_state_dict(self.value.state_dict())
 
         self.model_modules = nn.ModuleList([
             self.encoder,
@@ -165,8 +179,8 @@ class Dreamer(nn.Module):
             latent, action = state
         embed = self.encoder(self.preprocess_observation(obs))
         embed = embed.squeeze(0)
-        latent, _ = self.dynamics.obs_step(latent, action, embed)       # get the posterior state
-        feat  = self.dynamics.get_feat(latent)
+        latent, _   = self.dynamics.obs_step(latent, action, embed)       # get the posterior state
+        feat        = self.dynamics.get_feat(latent)
         if training:
             action = self.actor(feat).sample()                              # stochastic action
         else:
@@ -271,12 +285,31 @@ class Dreamer(nn.Module):
             likes.pcont     *= self.c.pcont_scale
         prior_dist = self.dynamics.get_dist(prior)
         post_dist  = self.dynamics.get_dist(post)
-        div = kl_divergence(post_dist, prior_dist).mean(dim=[0,1])
-        div = torch.clamp(div, min=self.c.free_nats)
+
+        if self.c.use_kl_balance:
+            alpha               = self.c.kl_balance_scale
+            detached_prior_dist = self.dynamics.get_dist(prior, detach=True)
+            detached_post_dits  = self.dynamics.get_dist(post, detach=True)
+            
+            kl_for_prior    = kl_divergence(detached_post_dits, prior_dist).mean(dim=[0,1])
+            kl_for_prior    = torch.clamp(kl_for_prior, min=self.c.free_nats)
+
+            kl_for_post     = kl_divergence(post_dist, detached_prior_dist).mean(dim=[0,1])
+            kl_for_post     = torch.clamp(kl_for_post, min=self.c.free_nats)
+
+            div             = alpha * kl_for_prior + (1 - alpha) * kl_for_post
+        else:
+            div = kl_divergence(post_dist, prior_dist).mean(dim=[0,1])
+            div = torch.clamp(div, min=self.c.free_nats)
+
         model_loss = self.c.kl_scale * div - sum(likes.values())
 
         # Actor Loss
-        with freeze(nn.ModuleList([self.model_modules, self.value])):
+        if self.c.use_value_target:
+            other_module = [self.model_modules, self.value, self.target_value]
+        else:
+            other_module = [self.model_modules, self.value]
+        with freeze(nn.ModuleList(other_module)):
             # (H + 1, BT, D), indexed t = 0 to H, includes the start state 
             # unlike original implementation
             imag_feat = self.imagine_ahead(post)
@@ -285,8 +318,11 @@ class Dreamer(nn.Module):
                 pcont = self.pcont(imag_feat[1:]).mean
             else:
                 pcont = self.c.discount * torch.ones_like(reward)
-            
-            value = self.value(imag_feat[1:]).mean
+            if self.c.use_value_target:
+                # use the value target
+                value = self.target_value(imag_feat[1:]).mean
+            else:
+                value = self.value(imag_feat[1:]).mean
             # The original implementation seems to be incorrect (off by one error)
             # This one should be correct
             # For t = 0 to H - 1
@@ -318,7 +354,7 @@ class Dreamer(nn.Module):
             value_pred = self.value(imag_feat[:self.c.update_horizon].detach())
             value_loss = torch.mean(
                 - value_pred.log_prob(target[:self.c.update_horizon]) * \
-                    mask[:self.c.update_horizon], 
+                mask[:self.c.update_horizon], 
                 dim=[0,1]
             )
 
@@ -343,6 +379,13 @@ class Dreamer(nn.Module):
             )
         if log_images:
             self.image_summaries(data, embed, image_pred, video_path)
+
+    def update_target(self):
+        if not self.c.use_value_target:
+            return
+        mix = self.c.slow_target_fraction if self.c.use_slow_target else 1
+        for param, target_param in zip(self.value.parameters(), self.target_value.parameters()):
+            target_param.data.copy_(mix * param.data + (1 - mix) * target_param.data)
 
     def write_log(self, step: int):
         """

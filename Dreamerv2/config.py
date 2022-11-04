@@ -19,7 +19,7 @@ class Config:
     log_scalars: bool = True
     log_images: bool = True
     # Environment.
-    task: str = 'cartpole_balance'
+    task: str = 'hopper_stand'
     envs: int = 1
     action_repeat: int = 2
     time_limit: int = 1000
@@ -28,12 +28,17 @@ class Config:
     clip_rewards: str = 'none'
     # Model.
     deter_size: int = 200
-    stoch_size: int = 30
+    hidden_size:int = 200
+    cat_size: int = 32
+    cla_size: int = 32
+    embed_size: int= 1024
     num_units: int = 400
     dense_act: str = 'elu'
     cnn_act: str = 'relu'
     cnn_depth: int = 32
     pcont: bool = False
+    use_kl_balance: bool = True
+    kl_balance_scale: float = 0.8
     free_nats: float = 3.0
     kl_scale: float = 1.0
     pcont_scale: float = 10.0
@@ -48,6 +53,11 @@ class Config:
     actor_lr: float = 8e-5
     grad_clip: float = 100.0
     dataset_balance: bool = False
+    # value target
+    use_value_target:bool = False
+    use_slow_target: bool = False
+    slow_target_fraction: float = 1.
+    slow_target_update: float = 10
     # Behavior.
     discount: float = 0.99
     disclam: float = 0.95

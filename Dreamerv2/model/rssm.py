@@ -3,22 +3,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torch.distributions import Independent, Normal
+from torch.distributions import Independent, OneHotCategoricalStraightThrough
 
 
 class RSSM(nn.Module):
     def __init__(
         self,
-        a_dim:      int,
-        stoch:      int = 30,
-        deter:      int = 200,
-        hidden:     int = 200,
-        embed:      int = 1024,
-        activation: nn.Module = nn.ELU
+        a_dim:          int,
+        class_size:     int,
+        category_size:  int,
+        deter:          int = 200,
+        hidden:         int = 200,
+        embed:          int = 1024,
+        activation:     nn.Module = nn.ELU
     ) -> None:
         super().__init__()
-
-        self.stoch_size     = stoch
+        
+        self.class_size     = class_size
+        self.category_size  = category_size
+        self.stoch_size     = class_size * category_size
         self.deter_size     = deter
         self.hidden_size    = hidden
 
@@ -31,20 +34,20 @@ class RSSM(nn.Module):
 
         # s + a -> GRU input
         self.fc_input = nn.Sequential(
-            nn.Linear(stoch + a_dim, hidden), 
+            nn.Linear(self.stoch_size + a_dim, hidden), 
             self.act
         )
         # deter state -> next s prior
         self.fc_prior = nn.Sequential(
             nn.Linear(deter, hidden),
             self.act,
-            nn.Linear(hidden, 2 * stoch)
+            nn.Linear(hidden, self.stoch_size)
         )
         # deter state + image -> next posterior
         self.fc_post  = nn.Sequential(
             nn.Linear(deter + embed, hidden),
             self.act,
-            nn.Linear(hidden, 2 * stoch)
+            nn.Linear(hidden, self.stoch_size)
         )
 
     @property
@@ -53,17 +56,35 @@ class RSSM(nn.Module):
 
     def initial(self, batch_size: int) -> Dict:
         return dict(
-            mean = torch.zeros(batch_size, self.stoch_size, device=self.device),
-            std  = torch.zeros(batch_size, self.stoch_size, device=self.device),
-            stoch= torch.zeros(batch_size, self.stoch_size, device=self.device),
-            deter= torch.zeros(batch_size, self.deter_size, device=self.device)
+            logits  = torch.zeros(batch_size, self.stoch_size, device=self.device),
+            stoch   = torch.zeros(batch_size, self.stoch_size, device=self.device),
+            deter   = torch.zeros(batch_size, self.deter_size, device=self.device)
         )
 
     def get_feat(self, state: Dict) -> Tensor:
         return torch.cat([state['stoch'], state['deter']], -1)
 
-    def get_dist(self, state: Dict) -> Tensor:
-        return Independent(Normal(state['mean'], state['std']), reinterpreted_batch_ndims=1)
+    def get_dist(self, state: Dict, detach: bool = False) -> Tensor:
+        if detach:
+            logits = state['logits'].detach()
+        else:
+            logits = state['logits']
+        shape = state['logits'].shape
+        logits= torch.reshape(logits, shape=(*shape[:-1], self.category_size, self.class_size))
+        return Independent(
+            OneHotCategoricalStraightThrough(logits= logits,),
+            reinterpreted_batch_ndims= 1
+        )
+
+    def get_stoch_var(self, state: Dict) -> Tensor:
+        logits = state['logits']
+        shape  = logits.shape
+        # reshape
+        logits = torch.reshape(logits, shape=(*shape[:-1], self.category_size, self.class_size))
+        dist   = OneHotCategoricalStraightThrough(logits=logits)# [B, cat * cla]
+        stoch  = dist.sample()
+        stoch  +=dist.probs - dist.probs.detach()               # straight-through gradient for discrete variables
+        return torch.flatten(stoch, start_dim=-2, end_dim=-1)   # [B, cat * cla]
 
     def img_step(self, prev_state: Tensor, prev_action: Tensor) -> Dict:
         """
@@ -73,17 +94,15 @@ class RSSM(nn.Module):
             prev_action: (B,  D) actions. 
             prev_state: (B, D) or None, initial state
         Returns:
-            post: dict, same key as initial(), each (B, D)
             prior: dict, same key as initial(), each (B, D)
         """
         x = torch.cat([prev_state['stoch'], prev_action], dim=-1)
         x = self.fc_input(x)
-        x = deter = self.cell(x, prev_state['deter'])
-        x = self.fc_prior(x)
-        mean, std   = x.chunk(2, dim=-1)
-        std         = F.softplus(std) + 0.1
-        stoch       = self.get_dist(dict(mean=mean, std=std)).rsample()
-        prior       = dict(mean=mean, std=std, stoch=stoch, deter=deter)
+        x = deter   = self.cell(x, prev_state['deter'])
+        x = logits  = self.fc_prior(x)
+
+        stoch  = self.get_stoch_var(dict(logits=logits))
+        prior  = dict(logits=logits, stoch=stoch, deter=deter)
         return prior
 
     def obs_step(self, prev_state: Tensor, prev_action: Tensor, embed: Tensor) -> Tuple[Tensor]:
@@ -100,11 +119,10 @@ class RSSM(nn.Module):
         prior = self.img_step(prev_state, prev_action)
         # compute posterior distribution
         x = torch.cat([prior['deter'], embed], dim=-1)
-        x = self.fc_post(x)
-        mean, std = x.chunk(2, dim=-1)
-        std = F.softplus(std) + 0.1
-        stoch = self.get_dist(dict(mean=mean, std=std)).rsample()
-        post  = dict(mean=mean, std=std, stoch=stoch, deter=prior['deter'])
+        x = logits = self.fc_post(x)
+
+        stoch = self.get_stoch_var(dict(logits=logits))
+        post  = dict(logits=logits, stoch=stoch, deter=prior['deter'])
         return post, prior       
 
     def observe(self, embed: Tensor, action: Tensor, state: Optional[Tensor] = None) -> Tuple[Tensor]:

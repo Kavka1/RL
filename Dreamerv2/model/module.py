@@ -9,21 +9,49 @@ from torch.distributions import Independent, Normal, Bernoulli, TransformedDistr
 
 
 
+def conv_out(in_dim: int, padding: int, kernel: int, stride: int) -> int:
+    return int((in_dim + 2. * padding - (kernel - 1.) - 1.) / stride + 1.)
+
+
+def conv_out_shape(h_in: List[int], padding: int, kernel: int, stride: int) -> Tuple:
+    return tuple(conv_out(x, padding, kernel, stride) for x in h_in)
+
+
+
 class ConvEncoder(nn.Module):
     def __init__(
         self,
-        depth:      int         = 32,
-        activation: nn.Module   = nn.ReLU()
+        input_shape:    Tuple,
+        embedding_size: int,
+        depth:          int         = 32,
+        activation:     nn.Module   = nn.ReLU()
     ) -> None:
         super().__init__()
 
-        self.depth = depth
+        assert len(input_shape) == 3
+
+        self.input_shape    = input_shape
+        self.embedding_size = embedding_size
+        self.depth          = depth
+
         self.conv1 = nn.Conv2d(3, 1 * depth, kernel_size=4, stride=2)
         self.conv2 = nn.Conv2d(1 * depth, 2 * depth, kernel_size=4, stride=2)
         self.conv3 = nn.Conv2d(2 * depth, 4 * depth, kernel_size=4, stride=2)
         self.conv4 = nn.Conv2d(4 * depth, 8 * depth, kernel_size=4, stride=2)
-        # 64 -> 31 -> 14 -> 6 -> 2
         self.act   = activation()
+
+        if self.out_conv_size == self.embedding_size:
+            self.fc = nn.Identity()
+        else:
+            self.fc = nn.Linear(self.out_conv_size, self.embedding_size)
+
+    @property
+    def out_conv_size(self) -> int:
+        conv1_shape = conv_out_shape(self.input_shape[1:], 0, 4, 2)
+        conv2_shape = conv_out_shape(conv1_shape, 0, 4, 2)
+        conv3_shape = conv_out_shape(conv2_shape, 0, 4, 2)
+        conv4_shape = conv_out_shape(conv3_shape, 0, 4, 2)
+        return int(8 * self.depth * np.prod(conv4_shape).item())
 
     def forward(self, obs: Dict[str, Tensor]) -> Tensor:
         x = obs['image']
@@ -36,11 +64,12 @@ class ConvEncoder(nn.Module):
         x = self.act(self.conv3(x))
         x = self.act(self.conv4(x))
         x = x.flatten(start_dim=-3)
+        x = self.fc(x)
 
         TB, *Other = x.size()
         x = x.view(T, B, *Other)
 
-        assert x.size(-1) == 32 * self.depth
+        assert x.size(-1) == self.embedding_size
         return x
 
 
@@ -48,13 +77,13 @@ class ConvDecoder(nn.Module):
     def __init__(
         self,
         feature_dim:    int,
+        output_shape:   Tuple[int, int, int]    =   (3, 64, 64),
         depth:          int                     =   32,
         activation:     nn.Module               =   nn.ReLU,
-        shape:          Tuple[int, int, int]    =   (3, 64, 64)
     ) -> None:
         super().__init__()
         self.depth = depth
-        self.shape = shape
+        self.shape = output_shape
 
         self.fc    = nn.Linear(feature_dim, 32 * depth)
         self.conv1 = nn.ConvTranspose2d(32 * depth, 4 * depth, kernel_size=5, stride=2)
