@@ -129,7 +129,7 @@ class DecisionTransformer(TrajectoryModel):
                 torch.zeros(self.max_len - states.shape[1]),
                 torch.ones(states.shape[1])
             ])
-            attention_mask  =   attention_mask.to(dtype=torch.long, device=states.device).reshape(1. -1)
+            attention_mask  =   attention_mask.to(dtype=torch.long, device=states.device).reshape(1, -1)
 
             states          =   torch.cat([
                 torch.zeros((states.shape[0], self.max_len - states.shape[1], self.s_dim), device=states.device), states
@@ -141,13 +141,13 @@ class DecisionTransformer(TrajectoryModel):
                 torch.zeros((states.shape[0], self.max_len - returns_to_go.shape[1], 1), device=returns_to_go.device), returns_to_go
             ], dim=1).to(dtype=torch.float32)
             timesteps       =   torch.cat([
-                torch.zeros((timesteps.shape[0], self.max_len - timesteps.shape[1], 1), device=timesteps.device), timesteps
-            ], dim=1).to(dtype=torch.float32)
+                torch.zeros((timesteps.shape[0], self.max_len - timesteps.shape[1]), device=timesteps.device), timesteps
+            ], dim=1).to(dtype=torch.long)
         else:
             attention_mask = None
 
         _, action_preds, return_preds = self.forward(
-            states, actions, None, returns_to_go, timesteps, attention_mask, **kwargs
+            states, actions, None, returns_to_go, timesteps, attention_mask=attention_mask, **kwargs
         )
 
         return action_preds[0, -1]

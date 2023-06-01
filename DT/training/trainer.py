@@ -32,7 +32,9 @@ class Trainer:
             if self.scheduler is not None:
                 self.scheduler.step()
             
-            print(f'Iteration {iter_num} - Step {_} - train_loss {train_loss}')
+            # print(f'Iteration {iter_num} - Step {_} - train_loss {train_loss}')
+            # for k, v in logs.items():
+            #     print(f'{k}: {v}')
 
         logs['time/training'] = time.time() - train_start
 
